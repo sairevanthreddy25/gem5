@@ -1,0 +1,281 @@
+diff --git a/configs/common/CacheConfig.py b/configs/common/CacheConfig.py
+index 61c6a304d7..9bb225ec8c 100644
+--- a/configs/common/CacheConfig.py
++++ b/configs/common/CacheConfig.py
+@@ -1,3 +1,4 @@
++
+ # Copyright (c) 2012-2013, 2015-2016 ARM Limited
+ # Copyright (c) 2020 Barkhausen Institut
+ # All rights reserved
+@@ -36,15 +37,12 @@
+ # THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-
+ # Configure the M5 cache hierarchy config in one place
+ #
+-
+ import m5
+ from m5.objects import *
+ from common.Caches import *
+ from common import ObjectList
+-
+ def _get_hwp(hwp_option):
+     if hwp_option == None:
+         return NULL
+@@ -73,7 +71,6 @@ def config_cache(options, system):
+     if options.external_memory_system and (options.caches or options.l2cache):
+         print("External caches and internal caches are exclusive options.\n")
+         sys.exit(1)
+-
+     if options.external_memory_system:
+         ExternalCache = ExternalCacheFactory(options.external_memory_system)
+ 
+@@ -114,16 +111,21 @@ def config_cache(options, system):
+     if options.l2cache and options.elastic_trace_en:
+         fatal("When elastic trace is enabled, do not configure L2 caches.")
+ 
+-    if options.l2cache:
+-        # Provide a clock for the L2 and the L1-to-L2 bus here as they
+-        # are not connected using addTwoLevelCacheHierarchy. Use the
+-        # same clock as the CPUs.
+-        system.l2 = l2_cache_class(clk_domain=system.cpu_clk_domain,
+-                                   **_get_cache_opts('l2', options))
+-
+-        system.tol2bus = L2XBar(clk_domain = system.cpu_clk_domain)
+-        system.l2.cpu_side = system.tol2bus.mem_side_ports
+-        system.l2.mem_side = system.membus.cpu_side_ports
++    # if (options.l2cache) and (bool(options.l3cache) == False):
++    #     # Provide a clock for the L2 and the L1-to-L2 bus here as they
++    #     # are not connected using addTwoLevelCacheHierarchy. Use the
++    #     # same clock as the CPUs.
++    #     system.l2 = l2_cache_class(clk_domain=system.cpu_clk_domain,
++    #                                **_get_cache_opts('l2', options))
++    #     system.tol2bus = L2XBar(clk_domain = system.cpu_clk_domain)
++    #     system.l2.cpu_side = system.tol2bus.mem_side_ports
++    #     system.l2.mem_side = system.membus.cpu_side_ports
++    #
++    if(options.l3cache):
++        system.l3 = L3Cache(clk_domain=system.cpu_clk_domain,**_get_cache_opts('l3', options))
++        system.tollcbus = L2XBar(clk_domain=system.cpu_clk_domain)
++        system.l3.cpu_side = system.tollcbus.mem_side_ports
++        system.l3.mem_side = system.membus.cpu_side_ports
+ 
+     if options.memchecker:
+         system.memchecker = MemChecker()
+@@ -185,10 +187,17 @@ def config_cache(options, system):
+                         ExternalCache("cpu%d.icache" % i),
+                         ExternalCache("cpu%d.dcache" % i))
+ 
++        if(options.l2cache):
++            system.cpu[i].l2 = l2_cache_class(clk_domain=system.cpu_clk_domain,
++                                       **_get_cache_opts('l2', options))
++            system.cpu[i].tol2bus = L2XBar(clk_domain=system.cpu_clk_domain)
++            system.cpu[i].l2.cpu_side = system.cpu[i].tol2bus.mem_side_ports
++            system.cpu[i].l2.mem_side = system.tollcbus.cpu_side_ports
++
+         system.cpu[i].createInterruptController()
+         if options.l2cache:
+             system.cpu[i].connectAllPorts(
+-                system.tol2bus.cpu_side_ports,
++                system.cpu[i].tol2bus.cpu_side_ports,
+                 system.membus.cpu_side_ports, system.membus.mem_side_ports)
+         elif options.external_memory_system:
+             system.cpu[i].connectUncachedPorts(
+diff --git a/configs/common/Caches.py b/configs/common/Caches.py
+index 1468b953c7..9d1dd1f5db 100644
+--- a/configs/common/Caches.py
++++ b/configs/common/Caches.py
+@@ -1,3 +1,4 @@
++
+ # Copyright (c) 2012 ARM Limited
+ # Copyright (c) 2020 Barkhausen Institut
+ # All rights reserved.
+@@ -71,6 +72,17 @@ class L2Cache(Cache):
+     tgts_per_mshr = 12
+     write_buffers = 8
+ 
++class L3Cache(Cache):
++    assoc = 16
++    tag_latency = 20
++    data_latency = 20
++    response_latency = 20
++    mshrs = 512
++    tgts_per_mshr = 20
++    write_buffers = 256
++
++    
++
+ class IOCache(Cache):
+     assoc = 8
+     tag_latency = 50
+diff --git a/configs/common/Options.py b/configs/common/Options.py
+index a63cc7b089..bbd19091e7 100644
+--- a/configs/common/Options.py
++++ b/configs/common/Options.py
+@@ -1,3 +1,4 @@
++
+ # Copyright (c) 2013-2020 ARM Limited
+ # All rights reserved.
+ #
+@@ -141,6 +142,7 @@ def addNoISAOptions(parser):
+                         help="use external port for SystemC TLM cosimulation")
+     parser.add_argument("--caches", action="store_true")
+     parser.add_argument("--l2cache", action="store_true")
++    parser.add_argument("--l3cache", action="store_true")
+     parser.add_argument("--num-dirs", type=int, default=1)
+     parser.add_argument("--num-l2caches", type=int, default=1)
+     parser.add_argument("--num-l3caches", type=int, default=1)
+diff --git a/configs/example/se.py b/configs/example/se.py
+index 3a8203da2e..ad825723f9 100644
+--- a/configs/example/se.py
++++ b/configs/example/se.py
+@@ -1,3 +1,4 @@
++
+ # Copyright (c) 2012-2013 ARM Limited
+ # All rights reserved.
+ #
+@@ -74,6 +75,7 @@ def get_processes(args):
+     pargs = []
+ 
+     workloads = args.cmd.split(';')
++
+     if args.input != "":
+         inputs = args.input.split(';')
+     if args.output != "":
+@@ -89,16 +91,13 @@ def get_processes(args):
+         process.executable = wrkld
+         process.cwd = os.getcwd()
+         process.gid = os.getgid()
+-
+         if args.env:
+             with open(args.env, 'r') as f:
+                 process.env = [line.rstrip() for line in f]
+-
+         if len(pargs) > idx:
+             process.cmd = [wrkld] + pargs[idx].split()
+         else:
+             process.cmd = [wrkld]
+-
+         if len(inputs) > idx:
+             process.input = inputs[idx]
+         if len(outputs) > idx:
+@@ -108,7 +107,6 @@ def get_processes(args):
+ 
+         multiprocesses.append(process)
+         idx += 1
+-
+     if args.smt:
+         assert(args.cpu_type == "DerivO3CPU")
+         return multiprocesses, idx
+@@ -140,6 +138,7 @@ if args.bench:
+                 exec("workload = %s('arm_%s', 'linux', '%s')" % (
+                         app, args.arm_iset, args.spec_input))
+             else:
++                print("Entered this")
+                 exec("workload = %s(buildEnv['TARGET_ISA', 'linux', '%s')" % (
+                         app, args.spec_input))
+             multiprocesses.append(workload.makeProcess())
+diff --git a/src/arch/riscv/linux/linux.hh b/src/arch/riscv/linux/linux.hh
+index 9c99d1b5d0..327b5a1643 100644
+--- a/src/arch/riscv/linux/linux.hh
++++ b/src/arch/riscv/linux/linux.hh
+@@ -195,6 +195,27 @@ class RiscvLinux64 : public RiscvLinux, public OpenFlagTable<RiscvLinux64>
+         uint32_t mem_unit;
+     };
+ 
++    struct tgt_clone_args {
++        uint64_t flags;        /* Flags bit mask */
++        uint64_t pidfd;        /* Where to store PID file descriptor
++                                (int *) */
++        uint64_t child_tid;    /* Where to store child TID,
++                                in child's memory (pid_t *) */
++        uint64_t parent_tid;   /* Where to store child TID,
++                                in parent's memory (pid_t *) */
++        uint64_t exit_signal;  /* Signal to deliver to parent on
++                                child termination */
++        uint64_t stack;        /* Pointer to lowest byte of stack */
++        uint64_t stack_size;   /* Size of stack */
++        uint64_t tls;          /* Location of new TLS */
++        uint64_t set_tid;      /* Pointer to a pid_t array
++                                (since Linux 5.5) */
++        uint64_t set_tid_size; /* Number of elements in set_tid
++                                (since Linux 5.5) */
++        uint64_t cgroup;       /* File descriptor for target cgroup
++                                of child (since Linux 5.7) */
++};
++
+     static void
+     archClone(uint64_t flags,
+               Process *pp, Process *cp,
+diff --git a/src/arch/riscv/linux/se_workload.cc b/src/arch/riscv/linux/se_workload.cc
+index dd9a8a2129..5ba2dcfdfb 100644
+--- a/src/arch/riscv/linux/se_workload.cc
++++ b/src/arch/riscv/linux/se_workload.cc
+@@ -399,6 +399,7 @@ SyscallDescTable<SEWorkload::SyscallABI> EmuLinux::syscallDescs64 = {
+     { 285,  "copy_file_range" },
+     { 286,  "preadv2" },
+     { 287,  "pwritev2" },
++    { 435,  "clone3", clone3Func<RiscvLinux64> },
+     { 1024, "open", openFunc<RiscvLinux64> },
+     { 1025, "link", linkFunc },
+     { 1026, "unlink", unlinkFunc },
+diff --git a/src/arch/x86/SConscript b/src/arch/x86/SConscript
+index 9eeefd76f4..455a5e2daa 100644
+--- a/src/arch/x86/SConscript
++++ b/src/arch/x86/SConscript
+@@ -78,7 +78,7 @@ SimObject('AtomicSimpleCPU.py', sim_objects=[], tags='x86 isa')
+ SimObject('TimingSimpleCPU.py', sim_objects=[], tags='x86 isa')
+ SimObject('NonCachingSimpleCPU.py', sim_objects=[], tags='x86 isa')
+ SimObject('O3CPU.py', sim_objects=[], tags='x86 isa')
+-
++SimObject('MinorCPU.py', sim_objects=[], tags='x86 isa')
+ DebugFlag('LocalApic', "Local APIC debugging", tags='x86 isa')
+ DebugFlag('X86', "Generic X86 ISA debugging", tags='x86 isa')
+ DebugFlag('ACPI', "ACPI debugging", tags='x86 isa')
+diff --git a/src/arch/x86/X86CPU.py b/src/arch/x86/X86CPU.py
+index 0b46c94c6e..b5c25ef40d 100644
+--- a/src/arch/x86/X86CPU.py
++++ b/src/arch/x86/X86CPU.py
+@@ -33,7 +33,7 @@ from m5.objects.X86Decoder import X86Decoder
+ from m5.objects.X86MMU import X86MMU
+ from m5.objects.X86LocalApic import X86LocalApic
+ from m5.objects.X86ISA import X86ISA
+-
++from m5.objects.BaseMinorCPU import BaseMinorCPU
+ class X86CPU:
+     ArchDecoder = X86Decoder
+     ArchMMU = X86MMU
+@@ -60,3 +60,5 @@ class X86O3CPU(BaseO3CPU, X86CPU):
+     # (it's a side effect of int reg renaming), so they should
+     # never be the bottleneck here.
+     numPhysCCRegs = Self.numPhysIntRegs * 5
++class X86MinorCPU(BaseMinorCPU, X86CPU):
++    mmu = X86MMU()
+diff --git a/src/sim/syscall_emul.hh b/src/sim/syscall_emul.hh
+index 59a97d938d..d8db7e30fa 100644
+--- a/src/sim/syscall_emul.hh
++++ b/src/sim/syscall_emul.hh
+@@ -1723,6 +1723,22 @@ cloneBackwardsFunc(SyscallDesc *desc, ThreadContext *tc, RegVal flags,
+     return cloneFunc<OS>(desc, tc, flags, newStack, ptidPtr, ctidPtr, tlsPtr);
+ }
+ 
++template <class OS>
++SyscallReturn
++clone3Func(SyscallDesc *desc, ThreadContext *tc,
++           VPtr<typename OS::tgt_clone_args> cl_args, RegVal size)
++{
++    VPtr<uint64_t> ptidPtr((Addr)cl_args->parent_tid, tc);
++    VPtr<uint64_t> ctidPtr((Addr)cl_args->child_tid, tc);
++    VPtr<uint64_t> tlsPtr((Addr)cl_args->tls, tc);
++    // Clone3 gives the stack as the *lowest* address, but clone/__clone2
++    // expects the stack parameter to be the actual stack pointer
++    uint64_t new_stack = cl_args->stack + cl_args->stack_size;
++    uint64_t flags = cl_args->flags;
++
++    return cloneFunc<OS>(desc, tc, flags, new_stack, ptidPtr, ctidPtr, tlsPtr);
++}
++
+ /// Target fstatfs() handler.
+ template <class OS>
+ SyscallReturn

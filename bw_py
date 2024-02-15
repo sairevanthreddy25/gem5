@@ -1,0 +1,26 @@
+import sys
+
+args = sys.argv[1]
+core = '0'
+if(len(sys.argv)>2):
+    core = sys.argv[2]
+
+
+# file_ = 'power_x86_fft_/stats.txt'
+file_ = args+'/stats.txt'
+data = open(file_,'r').read().strip().split('\n')
+
+# id= ['simSeconds','ipc','simInsts','simOps','dcache.overallHits::total','dcache.overallMisses::total','icache.overallHits::total','icache.overallMisses::total','bwTotal::total']
+#id= ['simSeconds','ipc','simInsts','simOps','dcache.overallHits::total','dcache.overallMisses::total','icache.overallHits::total','icache.overallMisses::total','l2.overallHits::total','l2.overallMisses::total','l3.overallHits::total','l3.overallMisses::total','bwTotal::total']
+id = ['bwInstRead']
+dest=[]
+inv_ = {'0':'1','1':'0'}
+for each_id in id:
+    for i in data:
+        if((('cpu'+inv_[core]) in i)):
+            continue
+        if(each_id in i):
+            dest.append(float(i.split()[1]))
+            break
+for i in dest:
+    print(i)

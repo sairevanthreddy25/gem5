@@ -1,3 +1,4 @@
+
 # Copyright (c) 2013-2020 ARM Limited
 # All rights reserved.
 #
@@ -141,6 +142,7 @@ def addNoISAOptions(parser):
                         help="use external port for SystemC TLM cosimulation")
     parser.add_argument("--caches", action="store_true")
     parser.add_argument("--l2cache", action="store_true")
+    parser.add_argument("--l3cache", action="store_true")
     parser.add_argument("--num-dirs", type=int, default=1)
     parser.add_argument("--num-l2caches", type=int, default=1)
     parser.add_argument("--num-l3caches", type=int, default=1)

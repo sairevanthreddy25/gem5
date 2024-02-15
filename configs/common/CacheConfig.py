@@ -1,3 +1,4 @@
+
 # Copyright (c) 2012-2013, 2015-2016 ARM Limited
 # Copyright (c) 2020 Barkhausen Institut
 # All rights reserved
@@ -36,15 +37,12 @@
 # THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 # Configure the M5 cache hierarchy config in one place
 #
-
 import m5
 from m5.objects import *
 from common.Caches import *
 from common import ObjectList
-
 def _get_hwp(hwp_option):
     if hwp_option == None:
         return NULL
@@ -73,7 +71,6 @@ def config_cache(options, system):
     if options.external_memory_system and (options.caches or options.l2cache):
         print("External caches and internal caches are exclusive options.\n")
         sys.exit(1)
-
     if options.external_memory_system:
         ExternalCache = ExternalCacheFactory(options.external_memory_system)
 
@@ -113,17 +110,22 @@ def config_cache(options, system):
     # any more caches.
     if options.l2cache and options.elastic_trace_en:
         fatal("When elastic trace is enabled, do not configure L2 caches.")
-
-    if options.l2cache:
-        # Provide a clock for the L2 and the L1-to-L2 bus here as they
-        # are not connected using addTwoLevelCacheHierarchy. Use the
-        # same clock as the CPUs.
-        system.l2 = l2_cache_class(clk_domain=system.cpu_clk_domain,
-                                   **_get_cache_opts('l2', options))
-
-        system.tol2bus = L2XBar(clk_domain = system.cpu_clk_domain)
-        system.l2.cpu_side = system.tol2bus.mem_side_ports
-        system.l2.mem_side = system.membus.cpu_side_ports
+    """
+    #     # Provide a clock for the L2 and the L1-to-L2 bus here as they
+    #     # are not connected using addTwoLevelCacheHierarchy. Use the
+    #     # same clock as the CPUs.
+    #     system.l2 = l2_cache_class(clk_domain=system.cpu_clk_domain,
+    #                                **_get_cache_opts('l2', options))
+    #     system.tol2bus = L2XBar(clk_domain = system.cpu_clk_domain)
+    #     system.l2.cpu_side = system.tol2bus.mem_side_ports
+    #     system.l2.mem_side = system.membus.cpu_side_ports
+    #
+    """
+    if(options.l3cache):
+        system.l3 = L3Cache(clk_domain=system.cpu_clk_domain,**_get_cache_opts('l3', options))
+        system.tollcbus = L2XBar(clk_domain=system.cpu_clk_domain)
+        system.l3.cpu_side = system.tollcbus.mem_side_ports
+        system.l3.mem_side = system.membus.cpu_side_ports
 
     if options.memchecker:
         system.memchecker = MemChecker()
@@ -185,10 +187,17 @@ def config_cache(options, system):
                         ExternalCache("cpu%d.icache" % i),
                         ExternalCache("cpu%d.dcache" % i))
 
+        if(options.l2cache):
+            system.cpu[i].l2 = l2_cache_class(clk_domain=system.cpu_clk_domain,
+                                       **_get_cache_opts('l2', options))
+            system.cpu[i].tol2bus = L2XBar(clk_domain=system.cpu_clk_domain)
+            system.cpu[i].l2.cpu_side = system.cpu[i].tol2bus.mem_side_ports
+            system.cpu[i].l2.mem_side = system.tollcbus.cpu_side_ports
+
         system.cpu[i].createInterruptController()
         if options.l2cache:
             system.cpu[i].connectAllPorts(
-                system.tol2bus.cpu_side_ports,
+                system.cpu[i].tol2bus.cpu_side_ports,
                 system.membus.cpu_side_ports, system.membus.mem_side_ports)
         elif options.external_memory_system:
             system.cpu[i].connectUncachedPorts(

@@ -1,3 +1,4 @@
+
 # Copyright (c) 2012-2013 ARM Limited
 # All rights reserved.
 #
@@ -74,6 +75,7 @@ def get_processes(args):
     pargs = []
 
     workloads = args.cmd.split(';')
+
     if args.input != "":
         inputs = args.input.split(';')
     if args.output != "":
@@ -89,16 +91,13 @@ def get_processes(args):
         process.executable = wrkld
         process.cwd = os.getcwd()
         process.gid = os.getgid()
-
         if args.env:
             with open(args.env, 'r') as f:
                 process.env = [line.rstrip() for line in f]
-
         if len(pargs) > idx:
             process.cmd = [wrkld] + pargs[idx].split()
         else:
             process.cmd = [wrkld]
-
         if len(inputs) > idx:
             process.input = inputs[idx]
         if len(outputs) > idx:
@@ -108,7 +107,6 @@ def get_processes(args):
 
         multiprocesses.append(process)
         idx += 1
-
     if args.smt:
         assert(args.cpu_type == "DerivO3CPU")
         return multiprocesses, idx
@@ -140,6 +138,7 @@ if args.bench:
                 exec("workload = %s('arm_%s', 'linux', '%s')" % (
                         app, args.arm_iset, args.spec_input))
             else:
+                print("Entered this")
                 exec("workload = %s(buildEnv['TARGET_ISA', 'linux', '%s')" % (
                         app, args.spec_input))
             multiprocesses.append(workload.makeProcess())

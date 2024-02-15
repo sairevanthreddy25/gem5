@@ -1,0 +1,22 @@
+import sys
+
+args = sys.argv[1]
+
+# file_ = 'power_x86_fft_/stats.txt'
+file_ = args+'/stats.txt'
+data = open(file_,'r').read().strip().split('\n')
+
+id= ['simSeconds','ipc','simInsts','simOps','dcache.overallHits::total','dcache.overallMisses::total','icache.overallHits::total','icache.overallMisses::total','bwTotal::total']
+dest=[]
+for each_id in id:
+    for i in data:
+        if(('cpu0' in i)):
+            continue
+        if(each_id in i):
+            dest.append(float(i.split()[1]))
+            break
+
+dest.insert(6,dest[4]/(dest[4]+dest[5]))
+dest.insert(9,dest[7]/(dest[7]+dest[8]))
+for i in dest:
+    print(i)
