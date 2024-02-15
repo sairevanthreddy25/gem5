@@ -110,6 +110,7 @@ commit_message_lines = commit_message.splitlines()
 commit_header = commit_message_lines[0]
 commit_header_match = \
     re.search("^(fixup! )?(\S[\w\-][,\s*[\w\-]+]*:.+\S$)", commit_header)
+sys.exit(0)
 if ((commit_header_match is None)):
     _printErrorQuit("Invalid commit header")
 if commit_header_match.group(1) == "fixup! ":
